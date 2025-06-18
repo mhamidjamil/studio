@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useForm, Controller, SubmitHandler } from 'react-hook-form';
@@ -20,9 +21,10 @@ import { Palette, Zap, PowerOff, RefreshCcw, Lightbulb, Send, Settings2, Wand2 }
 import { ColorPickerInput } from './ColorPickerInput';
 import { suggestRelevantColor as suggestRelevantColorAction } from '@/ai/flows/suggest-relevant-color';
 import { useEffect } from 'react';
+import { resolveColorToHexOrOff } from '@/lib/utils';
 
 const formSchema = z.object({
-  color: z.string().min(1, { message: "Color is required." }),
+  color: z.string().min(1, { message: "Color is required." }), // Will be hex or "off"
   style: z.enum(LED_STYLES).optional(),
   duration: z.coerce.number().min(0).optional(),
   brightness: z.coerce.number().min(0).max(100).optional(),
@@ -41,21 +43,33 @@ export function LedControlDashboard({ initialValues, onApplyConfiguration }: Led
   const { addHistoryItem } = useRequestHistory();
   const { toast } = useToast();
   
+  const defaultFormValues = {
+    color: PREDEFINED_COLORS.find(c => c.value === 'white')?.hex || '#ffffff', // Default to white's hex
+    style: 'solid' as LedStyle,
+    duration: 5,
+    brightness: 80,
+    method: 'GET' as ApiMethod,
+  };
+
   const form = useForm<LedControlFormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      color: 'white',
-      style: 'solid',
-      duration: 5,
-      brightness: 80,
-      method: 'GET',
-      ...initialValues,
+      ...defaultFormValues,
+      ...(initialValues 
+        ? { ...initialValues, color: resolveColorToHexOrOff(initialValues.color) } 
+        : {}),
     },
   });
 
   useEffect(() => {
     if (initialValues) {
-      form.reset(initialValues);
+      const resolvedInitialValues = { ...initialValues };
+      if (initialValues.color !== undefined) {
+        resolvedInitialValues.color = resolveColorToHexOrOff(initialValues.color);
+      }
+      form.reset({ ...defaultFormValues, ...resolvedInitialValues });
+    } else {
+      form.reset(defaultFormValues);
     }
   }, [initialValues, form]);
 
@@ -66,17 +80,17 @@ export function LedControlDashboard({ initialValues, onApplyConfiguration }: Led
       return;
     }
 
+    // data.color is already hex or "off" due to ColorPickerInput
     const params: LedRequestParams = {
-      name: data.color,
+      name: data.color, 
       style: data.style,
       time: data.duration,
       brightness: data.brightness,
     };
     
-    // For applying to parent or just sending
     if (onApplyConfiguration) {
         onApplyConfiguration(params);
-        form.reset(params as LedControlFormValues); // Update form with applied config
+        form.reset(params as LedControlFormValues); 
         return;
     }
 
@@ -103,12 +117,12 @@ export function LedControlDashboard({ initialValues, onApplyConfiguration }: Led
 
     switch (action) {
       case 'test':
-        params = { name: 'white', style: 'blink', time: 1, brightness: 50 };
+        params = { name: PREDEFINED_COLORS.find(c=> c.value === 'white')?.hex || '#ffffff', style: 'blink', time: 1, brightness: 50 };
         successMessage = 'LED Test signal sent.';
         response = await sendColorRequest(serverUrl, params, 'GET');
         break;
       case 'off':
-        params = { name: 'off' };
+        params = { name: 'off' }; // "off" is the special string
         successMessage = 'LED Turned Off.';
         response = await sendColorRequest(serverUrl, params, 'GET');
         break;
@@ -130,11 +144,12 @@ export function LedControlDashboard({ initialValues, onApplyConfiguration }: Led
   
   const handleAiSuggestColor = async () => {
     try {
-      const suggestion = await suggestRelevantColorAction({ currentDate: new Date().toISOString().split('T')[0] });
-      form.setValue('color', suggestion.colorSuggestion, { shouldValidate: true });
+      const result = await suggestRelevantColorAction({ currentDate: new Date().toISOString().split('T')[0] });
+      // AI now returns hex or "off"
+      form.setValue('color', result.colorSuggestion, { shouldValidate: true });
       toast({
         title: 'AI Color Suggestion',
-        description: `Suggested: ${suggestion.colorSuggestion}. Reason: ${suggestion.reason}`,
+        description: `Suggested: ${result.colorSuggestion}. Reason: ${result.reason}`,
       });
     } catch (error) {
       toast({
@@ -144,7 +159,6 @@ export function LedControlDashboard({ initialValues, onApplyConfiguration }: Led
       });
     }
   };
-
 
   return (
     <Card className="shadow-lg w-full">

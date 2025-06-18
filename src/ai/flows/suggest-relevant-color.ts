@@ -1,3 +1,4 @@
+
 'use server';
 
 /**
@@ -17,7 +18,7 @@ const SuggestRelevantColorInputSchema = z.object({
 export type SuggestRelevantColorInput = z.infer<typeof SuggestRelevantColorInputSchema>;
 
 const SuggestRelevantColorOutputSchema = z.object({
-  colorSuggestion: z.string().describe('A color suggestion relevant to the current day, season, or upcoming holidays.'),
+  colorSuggestion: z.string().describe("A hex color code (e.g., #RRGGBB) or the string 'off', relevant to the current day, season, or upcoming holidays."),
   reason: z.string().describe('The reason for the color suggestion.'),
 });
 export type SuggestRelevantColorOutput = z.infer<typeof SuggestRelevantColorOutputSchema>;
@@ -35,7 +36,7 @@ const prompt = ai.definePrompt({
   Today's date is: {{{currentDate}}}
 
   Respond with a JSON object that contains a colorSuggestion and a reason for the suggestion.
-  The colorSuggestion should be a valid CSS color name or a hex code.
+  The colorSuggestion should be a hex color code (e.g., #RRGGBB), or the string 'off'.
   Consider common holidays and seasons when suggesting the color.
   Be concise.
   `,

@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -10,81 +10,84 @@ import { PREDEFINED_COLORS } from "@/lib/types";
 import { cn } from '@/lib/utils';
 
 interface ColorPickerInputProps {
-  value: string; // Current color value (name or hex)
-  onChange: (value: string) => void; // Function to call when color changes
+  value: string; // Current color value (hex or "off")
+  onChange: (value: string) => void; // Function to call when color changes (hex or "off")
   label?: string;
   id?: string;
 }
 
-const isValidHex = (color: string) => /^#([0-9A-F]{3}){1,2}$/i.test(color);
-const findPredefinedColorByValue = (value: string) =>
-  PREDEFINED_COLORS.find(pc => pc.value.toLowerCase() === value.toLowerCase());
+const isValidHex = (color: string): boolean => /^#([0-9a-f]{3}){1,2}$/i.test(color);
 
 export function ColorPickerInput({ value, onChange, label = "Color", id = "color" }: ColorPickerInputProps) {
-  const getInitialMode = () => {
-    const isHex = isValidHex(value);
-    const isPredefined = !!findPredefinedColorByValue(value);
-    if (isHex && !isPredefined) return 'custom';
-    return 'predefined';
-  };
-
-  const [colorInputMode, setColorInputMode] = useState<'predefined' | 'custom'>(getInitialMode);
-  const [pickerHexValue, setPickerHexValue] = useState<string>(() => isValidHex(value) ? value : '#FFFFFF'); // Default to white
+  const [colorInputMode, setColorInputMode] = useState<'predefined' | 'custom'>('predefined');
+  // pickerHexValue is the hex for the <input type="color"> and text hex input.
+  // It defaults to white if the actual value is "off" for picker usability.
+  const [pickerHexValue, setPickerHexValue] = useState<string>('#ffffff');
 
   useEffect(() => {
-    const isHex = isValidHex(value);
-    const isPredefined = !!findPredefinedColorByValue(value);
+    const lowerValue = value ? value.toLowerCase() : '#ffffff';
 
-    if (isHex && !isPredefined) {
-      setColorInputMode('custom');
-      setPickerHexValue(value);
-    } else { 
+    if (lowerValue === 'off') {
       setColorInputMode('predefined');
-      if (isHex) { 
-        setPickerHexValue(value);
+      setPickerHexValue('#000000'); // Default picker to black when "Off" is active
+    } else if (isValidHex(lowerValue)) {
+      setPickerHexValue(lowerValue);
+      const isPredefinedHex = PREDEFINED_COLORS.some(pc => pc.hex.toLowerCase() === lowerValue);
+      if (isPredefinedHex) {
+        setColorInputMode('predefined');
+      } else {
+        setColorInputMode('custom');
       }
+    } else {
+      // This case should ideally not happen if parent ensures `value` is hex or "off".
+      // For robustness, treat unknown as custom white.
+      setColorInputMode('custom');
+      setPickerHexValue('#ffffff');
     }
   }, [value]);
 
   const handleModeChange = (newMode: 'predefined' | 'custom') => {
     setColorInputMode(newMode);
     if (newMode === 'custom') {
-      if (isValidHex(value)) {
-        onChange(value);
-        setPickerHexValue(value);
+      // If switching to custom, ensure a valid hex is propagated from pickerHexValue
+      if (isValidHex(pickerHexValue)) {
+        onChange(pickerHexValue);
       } else {
-        // If current value is a name, switch to picker's current/default hex
-        // Ensure pickerHexValue is up-to-date before calling onChange
-        const currentPickerVal = isValidHex(pickerHexValue) ? pickerHexValue : '#FFFFFF';
-        setPickerHexValue(currentPickerVal);
-        onChange(currentPickerVal);
+        onChange('#ffffff'); // Default to white if pickerHexValue somehow became invalid
       }
-    } else { 
-      const predefined = findPredefinedColorByValue(value);
-      if (!predefined && isValidHex(value)) {
-        const firstPredefined = PREDEFINED_COLORS.find(c => c.value !== 'off') || PREDEFINED_COLORS[0];
-        onChange(firstPredefined.value);
+    } else {
+      // If switching to predefined, and current value is not among predefined hexes or "off",
+      // select the first non-"off" predefined color.
+      const currentIsPredefined = PREDEFINED_COLORS.some(pc => pc.hex.toLowerCase() === value.toLowerCase());
+      if (!currentIsPredefined) {
+        const firstPredefined = PREDEFINED_COLORS.find(c => c.hex !== 'off') || PREDEFINED_COLORS[0];
+        onChange(firstPredefined.hex);
+      } else {
+         // If current value is already a predefined one, no need to call onChange,
+         // just ensure mode is set. RHF value is already correct.
       }
     }
   };
 
-  const handlePredefinedClick = (colorButtonValue: string) => {
-    onChange(colorButtonValue); // This will also trigger the useEffect above
+  const handlePredefinedClick = (colorHex: string) => {
+    onChange(colorHex); // This will call RHF's onChange, which updates `value` prop, triggering useEffect
   };
 
   const handlePickerChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newHex = e.target.value;
-    setPickerHexValue(newHex);
-    onChange(newHex); // This will also trigger the useEffect to set mode to 'custom' if needed
+    const newHex = e.target.value.toLowerCase();
+    setPickerHexValue(newHex); // Update internal picker state
+    onChange(newHex); // Propagate change upwards
   };
   
   const handleHexInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newText = e.target.value;
-    setPickerHexValue(newText); 
+    setPickerHexValue(newText); // Update internal picker state
     if (isValidHex(newText)) {
-      onChange(newText); // This will also trigger the useEffect
+      onChange(newText.toLowerCase()); // Propagate valid hex change upwards
     }
   };
+
+  const actualDisplayHex = value === 'off' ? pickerHexValue : value;
 
   return (
     <div className="space-y-1">
@@ -109,29 +112,29 @@ export function ColorPickerInput({ value, onChange, label = "Color", id = "color
       {colorInputMode === 'predefined' ? (
         <div className="flex flex-wrap gap-2 pt-1">
           {PREDEFINED_COLORS.map((color) => {
-            const isSelected = value.toLowerCase() === color.value.toLowerCase();
+            const isSelected = value.toLowerCase() === color.hex.toLowerCase();
             return (
               <Button
-                key={color.value}
-                type="button" // Important for react-hook-form
+                key={color.value} // Keep original value for key stability
+                type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => handlePredefinedClick(color.value)}
+                onClick={() => handlePredefinedClick(color.hex)}
                 className={cn(
                   "transition-all",
                   isSelected && "ring-2 ring-primary ring-offset-2",
-                  color.value === "off" && "border-dashed"
+                  color.hex === "off" && "border-dashed"
                 )}
                 aria-label={`Select color ${color.name}`}
               >
-                {color.value !== "off" && (
+                {color.hex !== "off" && (
                   <span
                     className="inline-block w-4 h-4 rounded-full border border-muted-foreground"
-                    style={{ backgroundColor: color.value }} // This works for CSS color names and hex values
+                    style={{ backgroundColor: color.hex }}
                     aria-hidden="true"
                   />
                 )}
-                <span className={cn(color.value !== "off" ? "ml-2" : "")}>
+                <span className={cn(color.hex !== "off" ? "ml-2" : "")}>
                   {color.name}
                 </span>
               </Button>
@@ -143,24 +146,25 @@ export function ColorPickerInput({ value, onChange, label = "Color", id = "color
           <Input
             id={`${id}-color-picker`}
             type="color"
-            value={pickerHexValue} // Use internal state for controlled color input
+            value={actualDisplayHex === 'off' ? '#000000' : actualDisplayHex} // Picker shows black if main value is "off"
             onChange={handlePickerChange}
-            className="p-1 h-10 w-14 min-w-[3.5rem] cursor-pointer" // min-w to prevent squishing
+            className="p-1 h-10 w-14 min-w-[3.5rem] cursor-pointer"
             aria-label="Custom color picker"
+            disabled={value === 'off' && colorInputMode === 'predefined'} // Disable if "Off" is truly selected via preset
           />
           <Input
             id={`${id}-hex-input`}
             type="text"
-            value={pickerHexValue} // Show the current hex from picker/input
-            onChange={handleHexInputChange} // Allow direct hex input
-            placeholder="#RRGGBB"
-            className="flex-grow font-mono text-sm" // Smaller text for hex
+            value={actualDisplayHex === 'off' ? '' : actualDisplayHex} // Show actual hex, or empty if "off"
+            onChange={handleHexInputChange}
+            placeholder="#rrggbb"
+            className="flex-grow font-mono text-sm"
             aria-label="Custom color hex input"
             maxLength={7}
+            disabled={value === 'off' && colorInputMode === 'predefined'}
           />
         </div>
       )}
     </div>
   );
 }
-
