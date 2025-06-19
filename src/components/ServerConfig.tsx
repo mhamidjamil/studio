@@ -1,6 +1,7 @@
+
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useServerUrl } from '@/hooks/useServerUrl';
 import { testConnection } from '@/lib/api';
 import { Button } from '@/components/ui/button';
@@ -16,18 +17,14 @@ export function ServerConfig() {
   const [connectionStatus, setConnectionStatus] = useState<'idle' | 'testing' | 'success' | 'failure'>('idle');
   const { toast } = useToast();
 
-  useState(() => {
-    setInputUrl(currentUrl);
-  });
-  
-  // Sync input when currentUrl changes from hook (e.g. on initial load)
-  useState(() => {
+  useEffect(() => {
     setInputUrl(currentUrl);
   }, [currentUrl]);
 
 
   const handleSaveUrl = () => {
     setCurrentUrl(inputUrl);
+    setConnectionStatus('idle'); // Reset connection status when URL changes
     toast({
       title: 'Server URL Saved',
       description: `Server URL updated to: ${inputUrl}`,
@@ -38,11 +35,15 @@ export function ServerConfig() {
   const handleTestConnection = async () => {
     setConnectionStatus('testing');
     const response = await testConnection(inputUrl);
-    if (response.success && response.data?.status === 'online') {
+
+    if (response.success) { // This means HTTP status was OK (e.g., 200)
       setConnectionStatus('success');
+      const serverMessage = response.data?.status === 'online'
+        ? 'Server confirmed online status.'
+        : (response.message || 'Successfully connected to the LED server.');
       toast({
         title: 'Connection Successful',
-        description: 'Successfully connected to the LED server.',
+        description: serverMessage,
         variant: 'default',
         action: <CheckCircle className="text-green-500" />,
       });
@@ -50,7 +51,7 @@ export function ServerConfig() {
       setConnectionStatus('failure');
       toast({
         title: 'Connection Failed',
-        description: response.message || 'Could not connect to the server.',
+        description: response.message || 'Could not connect to the server. Please check the URL and ensure the server is running.',
         variant: 'destructive',
         action: <AlertCircle className="text-red-500" />,
       });
@@ -65,7 +66,7 @@ export function ServerConfig() {
           Server Configuration
         </CardTitle>
         <CardDescription>
-          Set the URL for your LED controller server.
+          Set the URL for your LED controller server. (e.g., http://localhost:5000 or http://your-pi-ip:5000)
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -76,17 +77,20 @@ export function ServerConfig() {
               id="serverUrl"
               type="url"
               value={inputUrl}
-              onChange={(e) => setInputUrl(e.target.value)}
+              onChange={(e) => {
+                setInputUrl(e.target.value);
+                setConnectionStatus('idle'); // Reset status on URL change
+              }}
               placeholder="e.g., http://192.168.1.100:5000"
               aria-label="Server URL"
             />
-            <Button onClick={handleSaveUrl} variant="outline">Save</Button>
+            <Button onClick={handleSaveUrl} variant="outline" disabled={inputUrl === currentUrl}>Save</Button>
           </div>
         </div>
       </CardContent>
       <CardFooter className="flex flex-col sm:flex-row justify-between items-center gap-2">
         <Button onClick={handleTestConnection} disabled={connectionStatus === 'testing' || !inputUrl}>
-          {connectionStatus === 'testing' ? 'Testing...' : 'Test Connection'}
+          {connectionStatus === 'testing' ? 'Testing...' : (connectionStatus === 'success' ? 'Test Again' : 'Test Connection')}
         </Button>
         {connectionStatus === 'success' && (
           <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
@@ -104,3 +108,4 @@ export function ServerConfig() {
     </Card>
   );
 }
+
