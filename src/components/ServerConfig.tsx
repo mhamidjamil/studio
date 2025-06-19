@@ -12,19 +12,19 @@ import { useToast } from '@/hooks/use-toast';
 import { CheckCircle, AlertCircle, Zap, Wifi, WifiOff } from 'lucide-react';
 
 export function ServerConfig() {
-  const [currentUrl, setCurrentUrl] = useServerUrl();
-  const [inputUrl, setInputUrl] = useState(currentUrl);
+  const [storedUrl, setStoredUrl] = useServerUrl();
+  const [inputUrl, setInputUrl] = useState(storedUrl);
   const [connectionStatus, setConnectionStatus] = useState<'idle' | 'testing' | 'success' | 'failure'>('idle');
   const { toast } = useToast();
 
   useEffect(() => {
-    setInputUrl(currentUrl);
-  }, [currentUrl]);
+    setInputUrl(storedUrl);
+  }, [storedUrl]);
 
 
   const handleSaveUrl = () => {
-    setCurrentUrl(inputUrl);
-    setConnectionStatus('idle'); // Reset connection status when URL changes
+    setStoredUrl(inputUrl);
+    setConnectionStatus('idle'); 
     toast({
       title: 'Server URL Saved',
       description: `Server URL updated to: ${inputUrl}`,
@@ -36,7 +36,7 @@ export function ServerConfig() {
     setConnectionStatus('testing');
     const response = await testConnection(inputUrl);
 
-    if (response.success) { // This means HTTP status was OK (e.g., 200)
+    if (response.success) { 
       setConnectionStatus('success');
       const serverMessage = response.data?.status === 'online'
         ? 'Server confirmed online status.'
@@ -49,11 +49,28 @@ export function ServerConfig() {
       });
     } else {
       setConnectionStatus('failure');
+      let detailedMessage = response.message || 'Could not connect to the server. Please check the URL and ensure the server is running.';
+      
+      if (response.message && response.message.toLowerCase().includes('failed to fetch')) {
+        detailedMessage += " This can be due to a network issue or a CORS (Cross-Origin Resource Sharing) policy on the server. Please check your browser's developer console (usually F12, look under 'Console' or 'Network' tabs) for more specific error messages.";
+      } else if (response.data && typeof response.data === 'object' && Object.keys(response.data).length > 0) {
+         try {
+          detailedMessage = `Server responded with an error: ${JSON.stringify(response.data)}`;
+        } catch (e) {
+          // if stringify fails, keep the original detailedMessage
+        }
+      } else if (response.message && !response.data) {
+        // Use response.message if it exists and no other data was provided
+        detailedMessage = response.message;
+      }
+
+
       toast({
         title: 'Connection Failed',
-        description: response.message || 'Could not connect to the server. Please check the URL and ensure the server is running.',
+        description: detailedMessage,
         variant: 'destructive',
         action: <AlertCircle className="text-red-500" />,
+        duration: 10000, // Increased duration for longer messages
       });
     }
   };
@@ -79,12 +96,12 @@ export function ServerConfig() {
               value={inputUrl}
               onChange={(e) => {
                 setInputUrl(e.target.value);
-                setConnectionStatus('idle'); // Reset status on URL change
+                setConnectionStatus('idle'); 
               }}
               placeholder="e.g., http://192.168.1.100:5000"
               aria-label="Server URL"
             />
-            <Button onClick={handleSaveUrl} variant="outline" disabled={inputUrl === currentUrl}>Save</Button>
+            <Button onClick={handleSaveUrl} variant="outline" disabled={inputUrl === storedUrl && inputUrl !== ''}>Save</Button>
           </div>
         </div>
       </CardContent>
@@ -108,4 +125,3 @@ export function ServerConfig() {
     </Card>
   );
 }
-
