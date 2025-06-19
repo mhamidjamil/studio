@@ -22,9 +22,12 @@ import { ColorPickerInput } from './ColorPickerInput';
 import { suggestRelevantColor as suggestRelevantColorAction } from '@/ai/flows/suggest-relevant-color';
 import { useEffect } from 'react';
 import { resolveColorToHexOrOff } from '@/lib/utils';
+import { getFromLocalStorage, saveToLocalStorage } from '@/lib/localStorage';
+
+const LED_CONTROL_FORM_STATE_KEY = 'ledControlFormState';
 
 const formSchema = z.object({
-  color: z.string().min(1, { message: "Color is required." }), // Will be hex or "off"
+  color: z.string().min(1, { message: "Color is required." }),
   style: z.enum(LED_STYLES).optional(),
   duration: z.coerce.number().min(0).optional(),
   brightness: z.coerce.number().min(0).max(100).optional(),
@@ -38,27 +41,31 @@ interface LedControlDashboardProps {
   onApplyConfiguration?: (config: LedRequestParams) => void;
 }
 
+const hardcodedDefaultFormValues: LedControlFormValues = {
+  color: PREDEFINED_COLORS.find(c => c.value === 'white')?.hex || '#ffffff',
+  style: 'solid' as LedStyle,
+  duration: 5,
+  brightness: 80,
+  method: 'GET' as ApiMethod,
+};
+
 export function LedControlDashboard({ initialValues, onApplyConfiguration }: LedControlDashboardProps) {
   const [serverUrl] = useServerUrl();
   const { addHistoryItem } = useRequestHistory();
   const { toast } = useToast();
   
-  const defaultFormValues: LedControlFormValues = {
-    color: PREDEFINED_COLORS.find(c => c.value === 'white')?.hex || '#ffffff', // Default to white's hex
-    style: 'solid' as LedStyle,
-    duration: 5,
-    brightness: 80,
-    method: 'GET' as ApiMethod,
-  };
-
   const form = useForm<LedControlFormValues>({
     resolver: zodResolver(formSchema),
-    defaultValues: {
-      ...defaultFormValues,
-      ...(initialValues 
-        ? { ...initialValues, color: resolveColorToHexOrOff(initialValues.color) } 
-        : {}),
-    },
+    defaultValues: (() => {
+      const persistedState = getFromLocalStorage<Partial<LedControlFormValues>>(LED_CONTROL_FORM_STATE_KEY, {});
+      const resolvedPersistedColor = persistedState.color ? resolveColorToHexOrOff(persistedState.color) : undefined;
+      
+      return {
+        ...hardcodedDefaultFormValues,
+        ...persistedState,
+        ...(resolvedPersistedColor && { color: resolvedPersistedColor }),
+      };
+    })(),
   });
 
   useEffect(() => {
@@ -67,11 +74,25 @@ export function LedControlDashboard({ initialValues, onApplyConfiguration }: Led
       if (initialValues.color !== undefined) {
         resolvedInitialValues.color = resolveColorToHexOrOff(initialValues.color);
       }
-      form.reset({ ...defaultFormValues, ...resolvedInitialValues });
-    } else {
-      form.reset(defaultFormValues);
+      form.reset({ ...hardcodedDefaultFormValues, ...resolvedInitialValues });
     }
   }, [initialValues, form]);
+
+
+  const watchedValues = form.watch();
+  useEffect(() => {
+    const valuesToSave: Partial<LedControlFormValues> = {};
+    (Object.keys(watchedValues) as Array<keyof LedControlFormValues>).forEach(key => {
+      if (watchedValues[key] !== undefined) {
+        // @ts-ignore This is safe due to the keyof LedControlFormValues assertion
+        valuesToSave[key] = watchedValues[key];
+      }
+    });
+     if (valuesToSave.color) {
+        valuesToSave.color = resolveColorToHexOrOff(valuesToSave.color);
+    }
+    saveToLocalStorage(LED_CONTROL_FORM_STATE_KEY, valuesToSave);
+  }, [watchedValues]);
 
 
   const onSubmit: SubmitHandler<LedControlFormValues> = async (data) => {
@@ -81,7 +102,7 @@ export function LedControlDashboard({ initialValues, onApplyConfiguration }: Led
     }
 
     const params: LedRequestParams = {
-      color: data.color, // Use 'color' as the key for the API
+      color: data.color, 
       style: data.style,
       time: data.duration,
       brightness: data.brightness,
@@ -89,7 +110,7 @@ export function LedControlDashboard({ initialValues, onApplyConfiguration }: Led
     
     if (onApplyConfiguration) {
         onApplyConfiguration(params);
-        form.reset(params as LedControlFormValues); 
+        form.reset(data); // Use 'data' directly as it's LedControlFormValues
         return;
     }
 
@@ -121,7 +142,7 @@ export function LedControlDashboard({ initialValues, onApplyConfiguration }: Led
         response = await sendColorRequest(serverUrl, params, 'GET');
         break;
       case 'off':
-        params = { color: 'off' }; // Use 'color' as the key
+        params = { color: 'off' };
         successMessage = 'LED Turned Off.';
         response = await sendColorRequest(serverUrl, params, 'GET');
         break;
@@ -129,8 +150,7 @@ export function LedControlDashboard({ initialValues, onApplyConfiguration }: Led
         endpoint = '/reset';
         successMessage = 'LED Reset to default.';
         response = await apiResetLed(serverUrl);
-        // For reset, params might be empty or not relevant for history other than endpoint
-        params = {}; // Reset params for history logging for /reset
+        params = {}; 
         break;
     }
 
@@ -226,7 +246,16 @@ export function LedControlDashboard({ initialValues, onApplyConfiguration }: Led
                   <FormItem>
                     <FormLabel>Duration (seconds)</FormLabel>
                     <FormControl>
-                      <Input type="number" placeholder="e.g., 5" {...field} onChange={e => field.onChange(e.target.value === '' ? undefined : Number(e.target.value))}/>
+                      <Input 
+                        type="number" 
+                        placeholder="e.g., 5" 
+                        {...field} 
+                        value={field.value === undefined ? '' : field.value}
+                        onChange={e => {
+                          const val = e.target.value;
+                          field.onChange(val === '' ? undefined : Number(val));
+                        }}
+                      />
                     </FormControl>
                     <FormDescription>Optional. For blink/fade styles.</FormDescription>
                     <FormMessage />

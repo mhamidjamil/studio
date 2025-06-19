@@ -7,7 +7,7 @@ export function useServerUrl(): [string, (url: string) => void] {
   const [serverUrl, setServerUrl] = useState<string>('');
 
   useEffect(() => {
-    const storedUrl = getFromLocalStorage<string>(SERVER_URL_STORAGE_KEY, 'http://localhost:5000');
+    const storedUrl = getFromLocalStorage<string>(SERVER_URL_STORAGE_KEY, 'http://leds.dolphinpk.com/');
     setServerUrl(storedUrl);
   }, []);
 
