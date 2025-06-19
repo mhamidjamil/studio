@@ -53,7 +53,14 @@ async function makeRequest(
     }
   } catch (error) {
     console.error('API request failed:', error);
-    return { success: false, message: error instanceof Error ? error.message : 'Network error' };
+    let errorMessage = 'Network error or server unreachable.';
+    if (error instanceof Error) {
+        errorMessage = error.message;
+        if (error.message.toLowerCase().includes('failed to fetch')) {
+            errorMessage = "Network error or CORS issue. Please check the server URL, ensure the server is running, and check your browser's developer console for CORS errors if connecting to a remote server.";
+        }
+    }
+    return { success: false, message: errorMessage };
   }
 }
 
@@ -62,6 +69,8 @@ export async function sendColorRequest(
   params: LedRequestParams,
   method: ApiMethod
 ): Promise<ApiResponse> {
+  // The API expects 'color' as the parameter name for the color value.
+  // LedRequestParams uses 'color' for the color value.
   return makeRequest(baseUrl, '/color', method, params);
 }
 
@@ -80,7 +89,18 @@ export async function sendGpioRequest(
 }
 
 export async function testConnection(baseUrl: string): Promise<ApiResponse> {
-  return makeRequest(baseUrl, '/ping', 'GET');
+    // If server responds with success (e.g. 200 OK) even without specific JSON,
+    // we can consider it a basic success for the test.
+    const response = await makeRequest(baseUrl, '/ping', 'GET');
+    if (response.success) {
+        // Check if server explicitly says it's online
+        if (response.data && response.data.status === 'online') {
+            return { success: true, message: "Server confirmed online status.", data: response.data };
+        }
+        // If data is present but not the specific status, or no data but success, still OK for basic test
+        return { success: true, message: response.message || "Successfully connected to the server (ping successful).", data: response.data };
+    }
+    return response; // Return the original failed response
 }
 
 export async function resetLed(baseUrl: string): Promise<ApiResponse> {

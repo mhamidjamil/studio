@@ -1,6 +1,6 @@
 
 export interface LedRequestParams {
-  name?: string; // color name or hex, will become hex or "off"
+  color?: string; // color hex or "off"
   style?: 'solid' | 'blink' | 'fade';
   time?: number; // duration in seconds
   brightness?: number; // 0-100

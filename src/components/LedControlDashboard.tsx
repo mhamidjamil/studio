@@ -43,7 +43,7 @@ export function LedControlDashboard({ initialValues, onApplyConfiguration }: Led
   const { addHistoryItem } = useRequestHistory();
   const { toast } = useToast();
   
-  const defaultFormValues = {
+  const defaultFormValues: LedControlFormValues = {
     color: PREDEFINED_COLORS.find(c => c.value === 'white')?.hex || '#ffffff', // Default to white's hex
     style: 'solid' as LedStyle,
     duration: 5,
@@ -63,7 +63,7 @@ export function LedControlDashboard({ initialValues, onApplyConfiguration }: Led
 
   useEffect(() => {
     if (initialValues) {
-      const resolvedInitialValues = { ...initialValues };
+      const resolvedInitialValues: Partial<LedControlFormValues> = { ...initialValues };
       if (initialValues.color !== undefined) {
         resolvedInitialValues.color = resolveColorToHexOrOff(initialValues.color);
       }
@@ -80,9 +80,8 @@ export function LedControlDashboard({ initialValues, onApplyConfiguration }: Led
       return;
     }
 
-    // data.color is already hex or "off" due to ColorPickerInput
     const params: LedRequestParams = {
-      name: data.color, 
+      color: data.color, // Use 'color' as the key for the API
       style: data.style,
       time: data.duration,
       brightness: data.brightness,
@@ -117,12 +116,12 @@ export function LedControlDashboard({ initialValues, onApplyConfiguration }: Led
 
     switch (action) {
       case 'test':
-        params = { name: PREDEFINED_COLORS.find(c=> c.value === 'white')?.hex || '#ffffff', style: 'blink', time: 1, brightness: 50 };
+        params = { color: PREDEFINED_COLORS.find(c=> c.value === 'white')?.hex || '#ffffff', style: 'blink', time: 1, brightness: 50 };
         successMessage = 'LED Test signal sent.';
         response = await sendColorRequest(serverUrl, params, 'GET');
         break;
       case 'off':
-        params = { name: 'off' }; // "off" is the special string
+        params = { color: 'off' }; // Use 'color' as the key
         successMessage = 'LED Turned Off.';
         response = await sendColorRequest(serverUrl, params, 'GET');
         break;
@@ -130,6 +129,8 @@ export function LedControlDashboard({ initialValues, onApplyConfiguration }: Led
         endpoint = '/reset';
         successMessage = 'LED Reset to default.';
         response = await apiResetLed(serverUrl);
+        // For reset, params might be empty or not relevant for history other than endpoint
+        params = {}; // Reset params for history logging for /reset
         break;
     }
 
@@ -145,7 +146,6 @@ export function LedControlDashboard({ initialValues, onApplyConfiguration }: Led
   const handleAiSuggestColor = async () => {
     try {
       const result = await suggestRelevantColorAction({ currentDate: new Date().toISOString().split('T')[0] });
-      // AI now returns hex or "off"
       form.setValue('color', result.colorSuggestion, { shouldValidate: true });
       toast({
         title: 'AI Color Suggestion',

@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useRequestHistory } from '@/hooks/useRequestHistory';
@@ -7,7 +8,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { formatDistanceToNow } from 'date-fns';
 import { History, Trash2, CheckCircle, AlertCircle, CornerDownLeft } from 'lucide-react';
-import type { LedRequestParams } from '@/lib/types';
+import type { LedRequestParams, RequestHistoryItem } from '@/lib/types'; // Import RequestHistoryItem explicitly
 
 interface RequestHistoryProps {
   onApplyConfig: (config: LedRequestParams) => void;
@@ -16,8 +17,15 @@ interface RequestHistoryProps {
 export function RequestHistory({ onApplyConfig }: RequestHistoryProps) {
   const { history, clearHistory } = useRequestHistory();
 
-  const handleReapply = (item: LedRequestParams) => {
-    onApplyConfig(item);
+  const handleReapply = (item: RequestHistoryItem) => { // Use RequestHistoryItem type
+    // Construct LedRequestParams from RequestHistoryItem for re-application
+    const configToApply: LedRequestParams = {
+      color: item.color,
+      style: item.style,
+      time: item.time,
+      brightness: item.brightness,
+    };
+    onApplyConfig(configToApply);
   };
 
   return (
@@ -42,7 +50,7 @@ export function RequestHistory({ onApplyConfig }: RequestHistoryProps) {
                   <div className="flex-grow space-y-1">
                     <div className="flex items-center gap-2">
                        {item.status === 'success' ? <CheckCircle className="h-4 w-4 text-green-500" /> : <AlertCircle className="h-4 w-4 text-red-500" />}
-                      <span className="font-semibold capitalize">{item.name || 'N/A'}</span>
+                      <span className="font-semibold capitalize">{item.color || 'N/A'}</span>
                       {item.style && <Badge variant="secondary" className="capitalize">{item.style}</Badge>}
                       <Badge variant="outline">{item.method}</Badge>
                     </div>
